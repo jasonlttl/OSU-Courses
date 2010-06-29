@@ -1,0 +1,42 @@
+div.ui-tabs-panel {font-size:1em;}
+div.ui-tabs-nav {border-width: 0 0 0 0; }
+table.osu_course_schedule {
+  text-align:left;
+  font-size:1em;
+}
+
+div.ui-tabs-nav li {
+  border-width:1px 1px 1px 1px;
+  border-color: #D3D3D3 #D3D3D3 #D3D3D3 #D3D3D3;
+  border-style: solid solid solid solid;
+}
+
+.osu_course_component_type, 
+.osu_course_instructors,
+.osu_course_facility,
+.osu_course_days,
+.osu_course_times,
+.osu_course_pat_from,
+.osu_course_pat_to {
+  text-align:left;
+}
+
+.osu_course_child_class {
+  padding-left:20px;
+  background-repeat:no-repeat;
+  background-image:url(parent-child.png);
+}
+
+div.osu_course_session_schedule {width:100%}
+
+.osu_course_schedule  {
+  /*border-style:solid;border-width:1px;border-color:black;*/
+}
+td.osu_course_component_type, td.osu_course_instructors, td.osu_course_pat_to {border-style:solid;border-left-width:1px;border-right-width:1px;}
+
+div.view-courses-large-all-calendar div.view-content table tr th:first-child,
+div.view-courses-large-all-calendar div.view-content table tr th:last-child,
+div.view-courses-large-all-calendar div.view-content table tr th:first-child + th, 
+div.view-courses-large-all-calendar div.view-content table tr td:first-child,
+div.view-courses-large-all-calendar div.view-content table tr td:last-child,
+div.view-courses-large-all-calendar div.view-content table tr td:first-child + td {display:none;}

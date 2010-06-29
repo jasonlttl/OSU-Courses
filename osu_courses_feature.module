@@ -1,0 +1,456 @@
+<?php
+
+include_once('osu_courses_feature.features.inc');
+
+function osu_courses_feature_perm() {
+  return array('administer osu courses');
+}
+
+function osu_courses_feature_init() {
+  
+  // Standard css for courses
+  drupal_add_css(drupal_get_path('module', 'osu_courses_feature') .'/osu_courses_feature.css');
+  
+  // Required for JQuery UI Tabs - Should this be moved to the theme?
+  drupal_add_css(drupal_get_path('module', 'jquery_ui') . '/jquery.ui/themes/default/ui.all.css');
+  
+  // We need to do some detection to hide non-sensical filters.
+  $multi_campus = count(array_keys(osu_courses_feature_allowed_campuses()))>1;
+  $multi_subject = count(array_keys(osu_courses_feature_allowed_subjects()))>1;
+  
+  if (!$multi_campus) {
+    drupal_add_css(drupal_get_path('module', 'osu_courses_feature') .'/osu_courses_feature_1campus.css');
+  }
+  if (!$multi_subject) {
+    drupal_add_css(drupal_get_path('module', 'osu_courses_feature') .'/osu_courses_feature_1subject.css');
+  }
+}
+
+function osu_courses_feature_menu() {
+  $items = array();
+  $items['admin/settings/osu_courses'] = array(
+    'title' => 'OSU Courses',
+		'description' => 'Configure options for OSU Courses like available subjects, campus, etc',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('osu_courses_feature_admin_form'),
+		'access callback' => 'user_access',
+    'access arguments' => array('administer osu courses feature'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  return $items;
+ 
+}
+
+function osu_courses_feature_admin_form() {
+  $form = array();
+  $form['osu_courses_allowed_subjects'] = array(
+          '#type' => 'select',
+          '#multiple' => true,
+          '#title' => 'Allowed Subjects',
+          '#default_value' => variable_get('osu_courses_allowed_subjects', edsync_variable_get('osu_sis_course_subject', array())),
+          '#options' => osu_sis_get_subject_options(),
+          '#description' => t('Defines the subjects picklist for osu_course content type.  This is useful for things like filters on views.')
+          );
+  $form['osu_courses_allowed_campuses'] = array(
+          '#type' => 'select',
+          '#multiple' => true,
+          '#title' => 'Allowed Campus',
+          '#default_value' => variable_get('osu_courses_allowed_campuses', edsync_variable_get('osu_sis_course_campus', array())),
+          '#options' => osu_sis_get_campus_options(),
+          '#description' => t('Defines the campus picklist for osu_course content type.  This is useful for things like filters on views.')
+          );
+
+  return system_settings_form($form);
+}
+
+/*
+Get valid subjects */
+function osu_courses_feature_allowed_subjects() {
+  $keys = array_keys(variable_get('osu_courses_allowed_subjects', edsync_variable_get('osu_sis_course_subject', array())));
+  $options = osu_sis_get_subject_options();
+  $return_val = array();
+  foreach($keys as $key) {
+    $return_val[$key] = $options[$key];
+  }
+  return $return_val;
+}
+
+/*
+Get valid campuses */
+function osu_courses_feature_allowed_campuses() {
+  $keys = array_keys(variable_get('osu_courses_allowed_campuses', edsync_variable_get('osu_sis_course_campus', array())));
+  $options = osu_sis_get_campus_options();
+  $return_val = array();
+  foreach($keys as $key) {
+    $return_val[$key] = $options[$key];
+  }
+  return $return_val;
+}
+
+/*
+Implementation of hook theme.  */
+function osu_courses_feature_theme() {
+  return array(
+    // Stand in for course offering node template
+    'osu_courses_feature_course_theme' => array(
+      'arguments' => array('node' => NULL),
+      'template' => 'osu-courses-feature-course-theme'),
+
+    // theme for a course's schedule.  May contain multiple quarters
+    'osu_courses_feature_schedule_theme' => array(
+      'arguments' => array('all_schedule_data' => NULL),
+      'template' => 'osu-courses-feature-schedule-theme'),
+
+    // theme for a session in a course's schedule.
+    'osu_courses_feature_schedule_session_theme' => array(
+      'arguments' => array('session_schedule_data' => NULL),
+      'template' => 'osu-courses-feature-schedule-session-theme'),
+
+    // theme for a class in a session's schedule
+    'osu_courses_feature_schedule_class_theme' => array(
+      'arguments' => array('group_section_id' => null, 'class_section_id' => null, 'section_data' => NULL),
+      'template' => 'osu-courses-feature-schedule-class-theme'),
+      
+  );
+}
+
+function osu_courses_feature_class_schedule_fetch($nid, $min_session_id, $max_session_id)  {
+  //die("min:$min_session_id, max:$max_session_id\n");
+  $fields = osu_courses_feature_get_cck_db_info(array(
+    'field_osu_session_id', 
+    'field_osu_class_number', 
+    'field_class_assoc_section',
+    'field_osu_class_section',
+    'field_osu_class_enroll_cap', 
+    'field_osu_course_catalog_id',
+    'field_osu_course_id',
+    'field_osu_class_id',
+    'field_osu_class_sched_days',
+    'field_osu_class_component',
+    'field_osu_class_sched_instr_id',
+    'field_osu_facility_name_short',
+    'field_osu_facility_name_short',
+    'field_osu_class_sched_start_date',
+    'field_osu_class_sched_end_date',
+    'field_osu_class_sched_location',
+    'field_osu_class_enroll_cap',
+    'field_osu_class_enroll_min',
+    'field_osu_class_enroll_tot',
+    'field_osu_class_wait_tot',
+    'field_osu_class_wait_cap',
+    ));
+
+  $people_map = array();
+  if (function_exists('osu_people_feature_get_name_dot_n_map')) {
+    $people_map = osu_people_feature_get_name_dot_n_map();
+  }
+  
+  // This strategy of safely querying CCK fields directly is described here
+  // http://www.atendesigngroup.com/blog/safely-querying-cck-data-types
+  $sql = '
+    select
+      course.'.$fields['field_osu_course_catalog_id']['column'] .', 
+      course.'.$fields['field_osu_course_id']['column'] .',
+      class.'.$fields['field_osu_session_id']['column'] .', 
+      class.'.$fields['field_osu_class_number']['column'] .', 
+      class.'.$fields['field_class_assoc_section']['column'] .', 
+      class.'.$fields['field_osu_class_section']['column'] .', 
+      class.'.$fields['field_osu_class_enroll_cap']['column'] .',
+      class.'.$fields['field_osu_class_component']['column'] .',
+      
+      class.'.$fields['field_osu_class_enroll_cap']['column'] .',
+      class.'.$fields['field_osu_class_enroll_min']['column'] .',
+      class.'.$fields['field_osu_class_enroll_tot']['column'] .',
+      class.'.$fields['field_osu_class_wait_tot']['column'] .',
+      class.'.$fields['field_osu_class_wait_cap']['column'] .',
+      
+      sched.'.$fields['field_osu_class_sched_days']['column'] .',
+      sched.'.$fields['field_osu_facility_name_short']['column'] .',
+      sched.'.$fields['field_osu_class_sched_start_date']['column'] .',
+      sched.'.$fields['field_osu_class_sched_end_date']['column'] .',
+      sched.field_osu_class_sched_location_lid, 
+      loc.street,
+      loc.city,
+      loc.province,
+      loc.postal_code,
+      loc.country,
+      sess.title,
+      sched.merge_instr_ids
+    from
+      (
+        select
+          course_n.nid, 
+          course_focci.'.$fields['field_osu_course_catalog_id']['column'] .', 
+          course_foci.'.$fields['field_osu_course_id']['column'] .'
+        from
+          node course_n 
+          inner join {'.$fields['field_osu_course_catalog_id']['table'].'} course_focci 
+            on course_focci.vid = course_n.vid and course_focci.nid = course_n.nid 
+          inner join {'.$fields['field_osu_course_id']['table'].'} course_foci 
+            on course_foci.vid = course_n.vid and course_foci.nid = course_n.nid 
+          where course_n.type = \'osu_course\' and course_n.nid = %d 
+      ) course
+      inner join (
+        select 
+          class_foci.'.$fields['field_osu_course_id']['column'] .', 
+          class_foti.'.$fields['field_osu_session_id']['column'] .', 
+          class_focn.'.$fields['field_osu_class_number']['column'] .', 
+          class_fcas.'.$fields['field_class_assoc_section']['column'] .', 
+          class_focs.'.$fields['field_osu_class_section']['column'] .', 
+          class_focli.'.$fields['field_osu_class_id']['column'] .',
+          class_focc.'.$fields['field_osu_class_component']['column'] .',
+          
+          class_ec.'.$fields['field_osu_class_enroll_cap']['column'] .',
+          class_em.'.$fields['field_osu_class_enroll_min']['column'] .',
+          class_et.'.$fields['field_osu_class_enroll_tot']['column'] .',
+          class_wt.'.$fields['field_osu_class_wait_tot']['column'] .',
+          class_wc.'.$fields['field_osu_class_wait_cap']['column'] .'
+        from
+          node class_n
+          inner join {'.$fields['field_osu_session_id']['table'].'} class_foti 
+            on class_foti.vid = class_n.vid and class_foti.nid = class_n.nid 
+          inner join {'.$fields['field_osu_class_number']['table'].'} class_focn 
+            on class_focn.vid = class_n.vid and class_focn.nid = class_n.nid 
+          inner join {'.$fields['field_class_assoc_section']['table'].'} class_fcas 
+            on class_fcas.vid = class_n.vid and class_fcas.nid = class_n.nid 
+          inner join {'.$fields['field_osu_class_section']['table'].'} class_focs 
+            on class_focs.vid = class_n.vid and class_focs.nid = class_n.nid 
+          inner join {'.$fields['field_osu_course_id']['table'].'} class_foci 
+            on class_foci.vid = class_n.vid and class_foci.nid = class_n.nid 
+          inner join {'.$fields['field_osu_class_id']['table'].'} class_focli
+            on class_focli.vid = class_n.vid and class_focli.nid = class_n.nid 
+          inner join {'.$fields['field_osu_class_component']['table'].'} class_focc
+            on class_focc.vid = class_n.vid and class_focc.nid = class_n.nid 
+            
+          inner join {'.$fields['field_osu_class_enroll_cap']['table'].'} class_ec
+            on class_ec.vid = class_n.vid and class_ec.nid = class_n.nid 
+          inner join {'.$fields['field_osu_class_enroll_min']['table'].'} class_em
+            on class_em.vid = class_n.vid and class_em.nid = class_n.nid 
+          inner join {'.$fields['field_osu_class_enroll_tot']['table'].'} class_et
+            on class_et.vid = class_n.vid and class_et.nid = class_n.nid 
+          inner join {'.$fields['field_osu_class_wait_tot']['table'].'} class_wt
+            on class_wt.vid = class_n.vid and class_wt.nid = class_n.nid 
+          inner join {'.$fields['field_osu_class_wait_cap']['table'].'} class_wc
+            on class_wc.vid = class_n.vid and class_wc.nid = class_n.nid 
+            
+        where class_n.type = \'osu_class\'
+      ) class on class.'.$fields['field_osu_course_id']['column'].' = course.'.$fields['field_osu_course_id']['column'] . '
+      inner join (
+        select 
+          
+          sched_focli.'.$fields['field_osu_class_id']['column'] .', 
+          sched_focsd.'.$fields['field_osu_class_sched_days']['column'] .',
+          sched_fofns.'.$fields['field_osu_facility_name_short']['column'] .',
+          sched_focssd.'.$fields['field_osu_class_sched_start_date']['column'] .',
+          sched_focsed.'.$fields['field_osu_class_sched_end_date']['column'] .',
+          sched_focsed.field_osu_class_sched_location_lid,       
+          group_concat(sched_focsid.'.$fields['field_osu_class_sched_instr_id']['column'] .' separator \'~~~\') as merge_instr_ids
+        from
+          node sched_n
+          inner join {'.$fields['field_osu_class_id']['table'].'} sched_focli
+            on sched_focli.vid = sched_n.vid and sched_focli.nid = sched_n.nid 
+          inner join {'.$fields['field_osu_class_sched_days']['table'].'} sched_focsd 
+            on sched_focsd.vid = sched_n.vid and sched_focsd.nid = sched_n.nid 
+          inner join {'.$fields['field_osu_class_sched_instr_id']['table'].'} sched_focsid 
+            on sched_focsid.vid = sched_n.vid and sched_focsid.nid = sched_n.nid
+          inner join {'.$fields['field_osu_facility_name_short']['table'].'} sched_fofns 
+            on sched_fofns.vid = sched_n.vid and sched_fofns.nid = sched_n.nid
+          inner join {'.$fields['field_osu_class_sched_start_date']['table'].'} sched_focssd 
+            on sched_focssd.vid = sched_n.vid and sched_focssd.nid = sched_n.nid
+          inner join {'.$fields['field_osu_class_sched_end_date']['table'].'} sched_focsed 
+            on sched_focsed.vid = sched_n.vid and sched_focsed.nid = sched_n.nid
+        where sched_n.type = \'osu_class_sched\' 
+        group by
+          sched_focli.'.$fields['field_osu_class_id']['column'] .', 
+          sched_focsd.'.$fields['field_osu_class_sched_days']['column'] .',
+          sched_focsd.'.$fields['field_osu_facility_name_short']['column'] .',
+          sched_focsd.'.$fields['field_osu_class_sched_start_date']['column'] .',
+          sched_focsd.'.$fields['field_osu_class_sched_end_date']['column'] .',
+          sched_focsed.field_osu_class_sched_location_lid
+      ) sched on sched.'.$fields['field_osu_class_id']['column'].' = class.'.$fields['field_osu_class_id']['column'] .' 
+      inner join location loc on loc.lid = sched.field_osu_class_sched_location_lid 
+      inner join (
+        select 
+          sess_fosi.'.$fields['field_osu_session_id']['column'] .',
+          sess_n.title 
+        from 
+          node sess_n
+          inner join {'.$fields['field_osu_session_id']['table'].'} sess_fosi 
+            on sess_fosi.vid = sess_n.vid and sess_fosi.nid = sess_n.nid
+          where sess_n.type =\'osu_session\') sess on 
+            sess.'.$fields['field_osu_session_id']['column'] .' = class.'.$fields['field_osu_session_id']['column'] .'
+       where class.'.$fields['field_osu_session_id']['column'] .' >= \'%s\' and class.'.$fields['field_osu_session_id']['column'] .' <= \'%s\'
+    order by 
+      class.'.$fields['field_osu_session_id']['column'] .', 
+      class.'.$fields['field_class_assoc_section']['column'] .', 
+      class.'.$fields['field_osu_class_section']['column'];
+    
+  //print $sql."\n\n";
+  $results = db_query($sql, $nid, $min_session_id, $max_session_id);
+  $return_val = array();
+  while ($row = db_fetch_array($results)) {
+    
+    $field_osu_term_id = $row['title'];
+    $field_osu_class_number = $row[$fields['field_osu_class_number']['column']];
+    $field_class_assoc_section = $row[$fields['field_class_assoc_section']['column']];
+    $field_osu_class_section = $row[$fields['field_osu_class_section']['column']];
+    $field_osu_class_enroll_cap = $row[$fields['field_osu_class_enroll_cap']['column']];
+    $field_osu_course_catalog_id = $row[$fields['field_osu_course_catalog_id']['column']];
+    $field_osu_course_id = $row[$fields['field_osu_course_id']['column']];
+    $field_osu_class_sched_days = $row[$fields['field_osu_class_sched_days']['column']];
+    $field_osu_class_sched_start_date = $row[$fields['field_osu_class_sched_start_date']['column']];
+    $field_osu_class_sched_end_date = $row[$fields['field_osu_class_sched_end_date']['column']];
+    $field_osu_class_component = $row[$fields['field_osu_class_component']['column']];
+    $field_osu_facility_name_short = $row[$fields['field_osu_facility_name_short']['column']];
+    $merge_instr_ids = preg_split('/~~~/', $row['merge_instr_ids']);
+    for ($i=0; $i<count($merge_instr_ids); $i++) {
+      if (array_key_exists($merge_instr_ids[$i], $people_map)) {
+        $merge_instr_ids[$i] = '<a href="'.base_path().'node/'.$people_map[$merge_instr_ids[$i]].'">'.$merge_instr_ids[$i].'</a>';
+      }
+    }
+
+    if (!array_key_exists($field_osu_term_id, $return_val)) {
+      // Create a term group if none exists
+      $return_val[$field_osu_term_id] = array();
+    }
+    if (!array_key_exists($field_class_assoc_section, $return_val[$field_osu_term_id])) {
+      // Create an associated section grouping if none exists
+      $return_val[$field_osu_term_id][$field_class_assoc_section] = array();
+    }
+    if (!array_key_exists($field_osu_class_section, $return_val[$field_osu_term_id][$field_class_assoc_section])) {
+      // Create a section grouping if none exists
+      $return_val[$field_osu_term_id][$field_class_assoc_section][$field_osu_class_section] = array(
+        'field_osu_class_number' =>  $field_osu_class_number,
+        'field_osu_class_enroll_cap' =>  $field_osu_class_enroll_cap,
+        'field_osu_class_component' =>  $field_osu_class_component,
+        'field_osu_class_enroll_min' => $row[$fields['field_osu_class_enroll_min']['column']],
+        'field_osu_class_enroll_tot' => $row[$fields['field_osu_class_enroll_tot']['column']],
+        'field_osu_class_wait_tot' => $row[$fields['field_osu_class_wait_tot']['column']],
+        'field_osu_class_wait_cap' => $row[$fields['field_osu_class_wait_cap']['column']],
+        'meetings' =>  array(),
+      );
+    }
+
+    $return_val[$field_osu_term_id][$field_class_assoc_section][$field_osu_class_section]['meetings'][] = array(
+      'pattern' => $field_osu_class_sched_days,
+      'start_date' => $field_osu_class_sched_start_date,
+      'end_date' => $field_osu_class_sched_end_date,
+      'gmap_link' => 'http://maps.google.com/?q='.urlencode(
+        $row['street'] .', ' 
+        . $row['city'] .', ' 
+        . $row['province'] . ', '
+        . $row['postal_code'].', '
+        . $row['country']),
+      'facility_name' => $field_osu_facility_name_short,
+      'instructor_ids' => $merge_instr_ids,);
+  }
+
+  return $return_val;
+
+}
+
+function osu_courses_feature_get_current_session_id() {
+  $fields = osu_courses_feature_get_cck_db_info(array(
+    'field_osu_session_id',
+    'field_osu_session_end'));
+ 
+  $sql = '
+    select 
+      sessid.'.$fields['field_osu_session_id']['column'] . ' as myid 
+    from 
+      node n 
+      join '. $fields['field_osu_session_id']['table'] . ' sessid
+        on n.nid = sessid.nid and n.vid = sessid.vid  
+      join '. $fields['field_osu_session_end']['table'] .' sessend 
+        on n.nid = sessend.nid and n.vid = sessend.vid 
+    where 
+      \''.date('Y-m-d').'\' < sessend.'.$fields['field_osu_session_end']['column'] . ' order by sessend.'.$fields['field_osu_session_end']['column'] . ' limit 1 ';
+      
+  $results = db_query($sql);
+  $ids = array();
+  while ($row = db_fetch_array($results)) {
+    $ids[] = $row['myid'];
+  }
+  return $ids[0];
+}
+
+function osu_courses_feature_get_schedule_session_ids() {
+  $fields = osu_courses_feature_get_cck_db_info(array(
+    'field_osu_session_id',
+    'field_osu_session_end'));
+ 
+  $sql = '
+    select 
+      sessid.'.$fields['field_osu_session_id']['column'] . ' as myid 
+    from 
+      node n 
+      join '. $fields['field_osu_session_id']['table'] . ' sessid
+        on n.nid = sessid.nid and n.vid = sessid.vid  
+      join '. $fields['field_osu_session_end']['table'] .' sessend 
+        on n.nid = sessend.nid and n.vid = sessend.vid 
+    where 
+      \''.date('Y-m-d').'\' < sessend.'.$fields['field_osu_session_end']['column'] . ' order by sessend.'.$fields['field_osu_session_end']['column'] . ' limit 3 ';
+      
+  $results = db_query($sql);
+  $ids = array();
+  while ($row = db_fetch_array($results)) {
+    $ids[] = $row['myid'];
+  }
+  
+  $sql = '
+    select 
+      sessid.'.$fields['field_osu_session_id']['column'] . ' as myid 
+    from 
+      node n 
+      join '. $fields['field_osu_session_id']['table'] . ' sessid
+        on n.nid = sessid.nid and n.vid = sessid.vid  
+      join '. $fields['field_osu_session_end']['table'] .' sessend 
+        on n.nid = sessend.nid and n.vid = sessend.vid 
+    where 
+      \''.date('Y-m-d').'\' < sessend.'.$fields['field_osu_session_end']['column'] . ' order by sessend.'.$fields['field_osu_session_end']['column'] . '  limit 5 ';
+      //print $sql;
+  $results = db_query($sql);  
+  while ($row = db_fetch_array($results)) {
+    $ids[] = $row['myid'];
+  }
+  //print_r($ids);
+  
+  $ids = array_unique($ids);
+  sort($ids);
+  // asort($ids);
+  //die(print_r($ids, true));
+  return $ids;
+}
+
+function osu_courses_feature_get_cck_db_info($fields) {
+  $return_val = array();
+  foreach ($fields as $field) {
+    $field_info = content_fields($field);
+    $db_info = content_database_info($field_info);
+    $return_val[$field] = array(
+      'table' => $db_info['table'],
+      'column' => $db_info['columns']['value']['column']);
+  }
+  return $return_val;
+}
+
+function osu_courses_feature_block($op='list', $delta=0, $edit=array()) {
+  switch($op) {
+    case 'list':
+      $blocks[0]['info'] = 'OSU Courses - Course Schedule';
+      return $blocks;
+    case 'view':
+      if ( arg(0) == 'node' && is_numeric(arg(1)) && ! arg(2) ) {
+        $node = node_load(arg(1));
+        if ($node->type == 'osu_course') {
+          $blocks['subject'] = '';
+          $session_ids = osu_courses_feature_get_schedule_session_ids();
+          foreach ($session_ids as $session_id) {
+            $blocks['content'] .= 'NEXT = ' . print_r(array_keys(osu_courses_feature_class_schedule_fetch(arg(1), $session_id)), true);
+            $blocks['content'] .= osu_courses_feature_class_schedule_theme(osu_courses_feature_class_schedule_fetch(arg(1), $session_id));
+          }
+        }
+      }
+      return $blocks;
+  }
+}

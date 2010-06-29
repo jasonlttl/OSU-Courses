@@ -1,0 +1,256 @@
+<?php 
+
+
+function osu_courses_feature_install() {
+}
+
+function osu_courses_feature_enable() {
+  /*
+  Taxonomies don't work well with features and they're just damn hard to deploy
+  because of the whole no machine readable name issue.  I think I've decided to
+  ditch them in favor of more definitive data modelling (option lists) wherever
+  it's generally possible.  -Jason 
+  $vocab = array(
+    'name'  => t('OSU Course Level'),
+    'multiple'  => 0,
+    'required'  => 0,
+    'tags'  => 1,
+    'hierarchy' => 1,
+    'relations' => 0,
+    'nodes' => array('osu_course'=>1),
+    'module'    => 'osu_courses_feature',
+    'weight'        => -50,
+  );
+  $terms = array('0xx','100','200','300','400','500','600','700', '800', '900');  // specify
+  _osu_courses_feature_install_vocabulary('level', $vocab, $terms);
+  
+  $vocab = array(
+    'name'  => t('OSU Subject'),
+    'multiple'  => 0,
+    'required'  => 0,
+    'tags'  => 1,
+    'hierarchy' => 1,
+    'relations' => 0,
+    'nodes' => array('osu_course'=>1),
+    'module'    => 'osu_courses_feature',
+    'weight'        => -50,
+  );
+  $terms = array(); // Let these auto-populate
+  _osu_courses_feature_install_vocabulary('subject', $vocab, $terms);
+  
+  $vocab = array(
+    'name'  => t('OSU Campus'),
+    'multiple'  => 0,
+    'required'  => 0,
+    'tags'  => 1,
+    'hierarchy' => 1,
+    'relations' => 0,
+    'nodes' => array('osu_course'=>1),
+    'module'    => 'osu_courses_feature',
+    'weight'        => -50,
+  );
+  $terms = array(); // Let these auto-populate
+  _osu_courses_feature_install_vocabulary('campus', $vocab, $terms);
+
+  $vocab = array(
+    'name'  => t('OSU Class Type'),
+    'multiple'  => 0,
+    'required'  => 0,
+    'tags'  => 1,
+    'hierarchy' => 1,
+    'relations' => 0,
+    'nodes' => array('osu_class'=>1),
+    'module'    => 'osu_courses_feature',
+    'weight'        => -50,
+  );
+  $terms = array(); // Let these auto-populate
+  _osu_courses_feature_install_vocabulary('classtype', $vocab, $terms);
+  */
+  osu_courses_feature_automap_edsync();
+}
+
+/*
+Not using taxonomies here see above note - Jason
+function _osu_courses_feature_install_vocabulary($name, $vocab, $terms) { 
+
+  $variable = 'osu_courses_feature_vocabulary_'.$name.'_vid';
+  $vocabulary = _taxonomy_get_vocabulary(variable_get($variable, ''));
+  if ($vocabulary){
+    //drupal_set_message(print_r($vocabulary, true));
+    $vocabulary = (array) $vocabulary;
+    unset($vocabulary->nodes[$type][0]); // An indication no node types are selected
+    foreach ($vocab['nodes'] as $type => $val) {
+      $vocabulary['nodes'][$type] = $val;
+    }
+    taxonomy_save_vocabulary($vocabulary);  
+    $vid = $vocabulary['vid'];
+  }
+  else {
+    taxonomy_save_vocabulary($vocab);
+    variable_set($variable, $vocab['vid']);
+    $vid =  $vocab['vid'];
+  }
+
+  // Add any terms we know we need.
+  foreach($terms as $term){
+    $edit = array('vid'=>$vid, 'name'=>$term);
+    taxonomy_save_term($edit);
+  };
+}
+*/
+
+/* 
+There's a good read on how to work with views here. 
+http://views-help.doc.logrus.com/help/views/api-default-views 
+
+The actual views exporter is pretty self explanatory as well
+*/
+/*
+function _taxonomy_get_vocabulary($target_vid) {
+  $vocabs = taxonomy_get_vocabularies();
+  //drupal_set_message($target_vid.'='.print_r($vocabs, true));
+  foreach ($vocabs as $vid => $vocab) {
+    if ($target_vid == $vid) {
+      return $vocab;
+    }
+  }
+  return null;
+}*/
+
+function osu_courses_feature_disable() {
+}
+
+function osu_courses_feature_automap_edsync() {
+  
+  $modules = module_list();
+  if (module_exists('edsync') 
+    && module_exists('osu_sis_class')
+    && module_exists('osu_sis_class_sched')
+    && module_exists('osu_sis_course')) {
+
+    edsync_variable_set(edsync_data_osu_sis_class_content_type, 'osu_class');
+    edsync_variable_set(edsync_data_osu_sis_class_create, 1);
+    edsync_variable_set(edsync_data_osu_sis_class_delete, 1);
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_content_type_id_field, 'field_osu_class_id');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_body, '');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_class_assoc_section, 'derrived.associated_class');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_class_component, 'ps_class_tbl.ssr_component');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_class_enroll_cap, 'ps_class_tbl.enrl_cap');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_class_enroll_min, 'ps_class_tbl.min_enrl');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_class_enroll_tot, 'ps_class_tbl.enrl_tot');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_class_event_number, 'ps_class_tbl.campus_event_nbr');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_class_id, 'derrived.class_id');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_class_number, 'ps_class_tbl.class_nbr');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_class_section, 'ps_class_tbl.class_section');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_class_wait_cap, 'ps_class_tbl.wait_cap');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_class_wait_tot, 'ps_class_tbl.wait_tot');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_course_catalog_id, 'ps_class_tbl.crse_id');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_course_id, 'derrived.course_id');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_course_number, 'ps_class_tbl.catalog_nbr');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_course_offer_number, 'ps_class_tbl.crse_offer_nbr');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_session_code, 'ps_class_tbl.session_code');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_session_id, 'derrived.session_id');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_field_osu_term_code, 'ps_class_tbl.strm');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_mapping_title, 'derrived.number_title');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_nrfield_osu_class_to_course_ref_osu_course_external, 'derrived.course_id');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_nrfield_osu_class_to_course_ref_osu_course_local, 'field_osu_course_id');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_nrfield_osu_class_to_sched_ref_osu_class_sched_external, 'derrived.class_id');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_nrfield_osu_class_to_sched_ref_osu_class_sched_local, 'field_osu_class_id');
+    edsync_variable_set(edsync_data_osu_sis_class_osu_class_tax_mapping_4, 'ps_class_tbl.ssr_component');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_content_type, 'osu_class_sched');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_create, 1);
+    edsync_variable_set(edsync_data_osu_sis_class_sched_delete, 1);
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_content_type_id_field, 'field_osu_class_sched_id');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_body, '');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_class_id, 'derrived.class_id');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_class_schedule, 'derrived.schedule');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_class_sched_days, 'derrived.schedule_text');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_class_sched_end_date, 'ps_class_mtg_pat.end_dt');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_class_sched_id, 'derrived.schedule_id');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_class_sched_instr, 'ps_osr_cl_instr.name');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_class_sched_instr_id, 'ps_os_campus_id_vw.campus_id');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_class_sched_start_date, 'ps_class_mtg_pat.start_dt');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_class_section, 'ps_class_tbl.class_section');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_course_catalog_id, 'ps_class_tbl.crse_id');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_course_id, 'derrived.course_id');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_course_offer_number, 'ps_class_tbl.crse_offer_nbr');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_facility_id, 'ps_facility_tbl.facility_id');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_facility_name_short, 'ps_facility_tbl.descrshort');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_session_code, 'ps_class_tbl.session_code');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_session_id, 'derrived.session_id');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_field_osu_term_code, 'ps_class_tbl.strm');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_mapping_title, 'derrived.subject_number');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_nrfield_osu_sched_to_class_ref_osu_class_external, 'derrived.class_id');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_osu_class_sched_nrfield_osu_sched_to_class_ref_osu_class_local, 'field_osu_class_id');
+    edsync_variable_set(edsync_data_osu_sis_class_sched_pub_create, 0);
+    edsync_variable_set(edsync_data_osu_sis_class_sched_pub_delete, 0);
+    edsync_variable_set(edsync_data_osu_sis_class_sched_pub_update, 0);
+    edsync_variable_set(edsync_data_osu_sis_class_sched_update, 1);
+    edsync_variable_set(edsync_data_osu_sis_class_update, 1);
+    edsync_variable_set(edsync_data_osu_sis_course_content_type, 'osu_course');
+    edsync_variable_set(edsync_data_osu_sis_course_create, 1);
+    edsync_variable_set(edsync_data_osu_sis_course_delete, 1);
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_content_type_id_field, 'field_osu_course_id');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_mapping_body, '');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_mapping_field_osu_course_approved, 'ps_crse_offer.course_approved');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_mapping_field_osu_course_catalog_id, 'ps_crse_catalog.crse_id');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_mapping_field_osu_course_catalog_print, 'ps_crse_offer.catalog_print');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_mapping_field_osu_course_description, 'ps_crse_catalog.descrlong');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_mapping_field_osu_course_id, 'derrived.course_id');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_mapping_field_osu_course_number, 'ps_crse_offer.catalog_nbr');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_mapping_field_osu_course_offer_number, 'ps_crse_offer.crse_offer_nbr');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_mapping_field_osu_course_schd_prn, 'ps_crse_offer.schedule_print');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_mapping_field_osu_course_schd_prn_instr, 'ps_crse_offer.sched_print_instr');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_mapping_field_osu_course_subject, 'ps_subject_tbl.subject');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_mapping_field_osu_course_campus, 'ps_campus_tbl.campus');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_mapping_field_osu_course_level, 'derrived.level');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_mapping_title, 'derrived.subject_number_title');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_nrfield_osu_course_to_class_ref_osu_class_external, 'derrived.course_id');
+    edsync_variable_set(edsync_data_osu_sis_course_osu_course_nrfield_osu_course_to_class_ref_osu_class_local, 'field_osu_course_id');
+    // Removing taxonomies -Jason
+    //edsync_variable_set(edsync_data_osu_sis_course_osu_course_tax_mapping_1, 'derrived.level');
+    //edsync_variable_set(edsync_data_osu_sis_course_osu_course_tax_mapping_2, 'ps_subject_tbl.descr');
+    //edsync_variable_set(edsync_data_osu_sis_course_osu_course_tax_mapping_3, 'ps_campus_tbl.descr');
+    edsync_variable_set(edsync_data_osu_sis_course_pub_create, 1);
+    edsync_variable_set(edsync_data_osu_sis_course_update, 1);
+    edsync_variable_set(edsync_data_osu_sis_session_content_type, 'osu_session');
+    edsync_variable_set(edsync_data_osu_sis_session_create, 1);
+    edsync_variable_set(edsync_data_osu_sis_session_delete, 1);
+    edsync_variable_set(edsync_data_osu_sis_session_osu_session_content_type_id_field, 'field_osu_session_id');
+    edsync_variable_set(edsync_data_osu_sis_session_osu_session_mapping_body, '');
+    edsync_variable_set(edsync_data_osu_sis_session_osu_session_mapping_field_osu_session_60_percent, 'ps_session_tbl.sixty_pct_dt');
+    edsync_variable_set(edsync_data_osu_sis_session_osu_session_mapping_field_osu_session_begin, 'ps_session_tbl.sess_begin_dt');
+    edsync_variable_set(edsync_data_osu_sis_session_osu_session_mapping_field_osu_session_census, 'ps_session_tbl.census_dt');
+    edsync_variable_set(edsync_data_osu_sis_session_osu_session_mapping_field_osu_session_code, 'ps_session_tbl.session_code');
+    edsync_variable_set(edsync_data_osu_sis_session_osu_session_mapping_field_osu_session_end, 'ps_session_tbl.sess_end_dt');
+    edsync_variable_set(edsync_data_osu_sis_session_osu_session_mapping_field_osu_session_enroll_open, 'ps_session_tbl.enroll_open_dt');
+    edsync_variable_set(edsync_data_osu_sis_session_osu_session_mapping_field_osu_session_first_enroll, 'ps_session_tbl.first_enrl_dt');
+    edsync_variable_set(edsync_data_osu_sis_session_osu_session_mapping_field_osu_session_id, 'derrived.session_id');
+    edsync_variable_set(edsync_data_osu_sis_session_osu_session_mapping_field_osu_session_last_wait, 'ps_session_tbl.last_wait_dt');
+    edsync_variable_set(edsync_data_osu_sis_session_osu_session_mapping_field_osu_session_weeks_instruct, 'ps_session_tbl.weeks_of_instruct');
+    edsync_variable_set(edsync_data_osu_sis_session_osu_session_mapping_field_osu_term_code, 'ps_session_tbl.strm');
+    edsync_variable_set(edsync_data_osu_sis_session_osu_session_mapping_title, 'derrived.title');
+    edsync_variable_set(edsync_data_osu_sis_session_update, 1);
+
+    edsync_variable_set(osu_sis_course_approved, 1);
+    edsync_variable_set(osu_sis_course_campus, array (
+      'COL' => 'COL',
+    ));
+    edsync_variable_set(osu_sis_course_catalog_print, 1);
+    edsync_variable_set(osu_sis_course_crse_ids, '');
+    edsync_variable_set(osu_sis_course_schedule_print, 1);
+    edsync_variable_set(osu_sis_course_subject, array (
+      'CIVILEN' => 'CIVILEN',
+    ));
+    edsync_variable_set(osu_sis_course_terms_back, '0');
+    edsync_variable_set(osu_sis_course_terms_forward, '1');
+    edsync_variable_set(osu_sis_terms_back, '4');
+    edsync_variable_set(osu_sis_terms_forward, '4');
+    edsync_variable_set(osu_sis_term_career, 'UGRD');
+
+    
+
+  }
+  
+}
+?>
